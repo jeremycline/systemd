@@ -220,6 +220,24 @@ for u in test-disable@{1,2}.service; do
 done
 rm /run/systemd/system/test-disable@.service
 
+# glob operations with --now on template units
+cat >/run/systemd/system/test-glob@.service <<EOF
+[Service]
+ExecStart=sleep infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl enable --now test-glob@1.service test-glob@2.service
+systemctl is-active test-glob@*.service
+systemctl is-enabled test-glob@*.service
+systemctl disable --now test-glob@*.service
+for u in test-glob@{1,2}.service; do
+    (! systemctl is-active "$u")
+    (! systemctl is-enabled "$u")
+done
+rm /run/systemd/system/test-glob@.service
+
 # add-wants/add-requires
 (! systemctl show -P Wants "$UNIT_NAME" | grep "systemd-journald.service")
 systemctl add-wants "$UNIT_NAME" "systemd-journald.service"

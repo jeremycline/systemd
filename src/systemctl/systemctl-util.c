@@ -925,7 +925,19 @@ UnitFileFlags unit_file_flags_from_args(void) {
                (arg_force   ? UNIT_FILE_FORCE   : 0);
 }
 
-int mangle_names(const char *operation, char * const *original_names, char ***ret) {
+/**
+ * Convert a list of @original_names to unit names.
+ *
+ * Providing the @UNIT_NAME_MANGLE_GLOB flag allows names to contain glob
+ * expressions (e.g. foo@*.service). If this flag is not provided any invalid
+ * characters, including glob characters, are escaped. Additionally, if the flag
+ * is not provided and the name lacks a suffix, the ".service" suffix is
+ * appended to the name.
+ *
+ * In the event that the original name is a path, it is made to be an absolute
+ * path and no other mangling is performed.
+ */
+int mangle_names(const char *operation, char * const *original_names, UnitNameMangle flags,  char ***ret) {
         _cleanup_strv_free_ char **l = NULL;
         int r;
 
@@ -940,8 +952,8 @@ int mangle_names(const char *operation, char * const *original_names, char ***re
                         r = path_make_absolute_cwd(*name, &mangled);
                 else
                         r = unit_name_mangle_with_suffix(*name, operation,
-                                                         arg_quiet ? 0 : UNIT_NAME_MANGLE_WARN,
-                                                         ".service", &mangled);
+                                                         flags, ".service",
+                                                         &mangled);
                 if (r < 0)
                         return log_error_errno(r, "Failed to mangle unit name or path '%s': %m", *name);
 

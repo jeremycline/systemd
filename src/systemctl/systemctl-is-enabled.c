@@ -60,23 +60,26 @@ static int show_installation_targets(sd_bus *bus, const char *name) {
 
 int verb_is_enabled(int argc, char *argv[], void *userdata) {
         _cleanup_strv_free_ char **names = NULL;
+        UnitNameMangle flags = arg_quiet ? 0 : UNIT_NAME_MANGLE_WARN;
         bool not_found, enabled;
         int r;
 
-        r = mangle_names("to check", strv_skip(argv, 1), &names);
+        if (!install_client_side())
+                flags |= UNIT_NAME_MANGLE_GLOB;
+
+        r = mangle_names("to check", strv_skip(argv, 1), flags, &names);
         if (r < 0)
                 return r;
-
-        r = enable_sysv_units(argv[0], names);
-        if (r < 0)
-                return r;
-
-        not_found = r == 0; /* Doesn't have SysV support or SYSV_UNIT_NOT_FOUND */
-        enabled = r == SYSV_UNIT_ENABLED;
 
         if (install_client_side()) {
                 STRV_FOREACH(name, names) {
                         UnitFileState state;
+
+                        r = enable_sysv_units(argv[0], names);
+                        if (r < 0)
+                                return r;
+                        not_found = r == 0; /* Doesn't have SysV support or SYSV_UNIT_NOT_FOUND */
+                        enabled = r == SYSV_UNIT_ENABLED;
 
                         r = unit_file_get_state(arg_runtime_scope, arg_root, *name, &state);
                         if (r == -ENOENT) {
@@ -115,6 +118,17 @@ int verb_is_enabled(int argc, char *argv[], void *userdata) {
                 r = acquire_bus(BUS_MANAGER, &bus);
                 if (r < 0)
                         return r;
+
+                r = expand_unit_names(bus, strv_skip(argv, 1), NULL, &names, NULL);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to expand names: %m");
+
+                r = enable_sysv_units(argv[0], names);
+                if (r < 0)
+                        return r;
+
+                not_found = r == 0; /* Doesn't have SysV support or SYSV_UNIT_NOT_FOUND */
+                enabled = r == SYSV_UNIT_ENABLED;
 
                 STRV_FOREACH(name, names) {
                         _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL;

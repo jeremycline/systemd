@@ -70,28 +70,21 @@ static int normalize_names(char **names) {
 int verb_enable(int argc, char *argv[], void *userdata) {
         const char *verb = ASSERT_PTR(argv[0]);
         _cleanup_strv_free_ char **names = NULL;
+        UnitNameMangle mangle_flags = arg_quiet ? 0 : UNIT_NAME_MANGLE_WARN;
         int carries_install_info = -1;
         bool ignore_carries_install_info = arg_quiet || arg_no_warn;
         sd_bus *bus = NULL;
         int r;
 
         const char *operation = strjoina("to ", verb);
-        r = mangle_names(operation, ASSERT_PTR(strv_skip(argv, 1)), &names);
+
+        if (!install_client_side())
+                mangle_flags |= UNIT_NAME_MANGLE_GLOB;
+
+        r = mangle_names(operation, ASSERT_PTR(strv_skip(argv, 1)),
+                         mangle_flags, &names);
         if (r < 0)
                 return r;
-
-        r = enable_sysv_units(verb, names);
-        if (r < 0)
-                return r;
-
-        /* If the operation was fully executed by the SysV compat, let's finish early */
-        if (strv_isempty(names)) {
-                if (arg_no_reload || install_client_side())
-                        return 0;
-
-                r = daemon_reload(ACTION_RELOAD, /* graceful= */ false);
-                return r > 0 ? 0 : r;
-        }
 
         if (streq(verb, "disable"))
                 r = normalize_names(names);
@@ -106,6 +99,19 @@ int verb_enable(int argc, char *argv[], void *userdata) {
                 UnitFileFlags flags;
                 InstallChange *changes = NULL;
                 size_t n_changes = 0;
+
+                r = enable_sysv_units(verb, names);
+                if (r < 0)
+                        return r;
+
+                /* If the operation was fully executed by the SysV compat, let's finish early */
+                if (strv_isempty(names)) {
+                        if (arg_no_reload || install_client_side())
+                                return 0;
+
+                        r = daemon_reload(ACTION_RELOAD, /* graceful= */ false);
+                        return r > 0 ? 0 : r;
+                }
 
                 CLEANUP_ARRAY(changes, n_changes, install_changes_free);
 
@@ -163,6 +169,23 @@ int verb_enable(int argc, char *argv[], void *userdata) {
                 r = acquire_bus(BUS_MANAGER, &bus);
                 if (r < 0)
                         return r;
+
+                r = expand_unit_names(bus, names, NULL, &names, NULL);
+                if (r < 0)
+                        return log_error_errno(r, "Failed to expand names: %m");
+
+                r = enable_sysv_units(verb, names);
+                if (r < 0)
+                        return r;
+
+                /* If the operation was fully executed by the SysV compat, let's finish early */
+                if (strv_isempty(names)) {
+                        if (arg_no_reload || install_client_side())
+                                return 0;
+
+                        r = daemon_reload(ACTION_RELOAD, /* graceful= */ false);
+                        return r > 0 ? 0 : r;
+                }
 
                 polkit_agent_open_maybe();
 

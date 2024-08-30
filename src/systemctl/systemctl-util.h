@@ -53,7 +53,7 @@ int output_table(Table *table);
 
 bool show_preset_for_state(UnitFileState state);
 
-int mangle_names(const char *operation, char * const *original_names, char ***ret);
+int mangle_names(const char *operation, char * const *original_names, UnitNameMangle flags, char ***ret);
 
 UnitFileFlags unit_file_flags_from_args(void);
 

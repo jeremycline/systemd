@@ -23,7 +23,9 @@ int verb_add_dependency(int argc, char *argv[], void *userdata) {
         if (r < 0)
                 return log_error_errno(r, "Failed to mangle unit name: %m");
 
-        r = mangle_names("as dependency", strv_skip(argv, 2), &names);
+        r = mangle_names("as dependency", strv_skip(argv, 2),
+                         arg_quiet ? 0 : UNIT_NAME_MANGLE_WARN,
+                         &names);
         if (r < 0)
                 return r;
 
