@@ -132,6 +132,9 @@ int enable_sysv_units(const char *verb, char **args) {
                         "is-enabled"))
                 return 0;
 
+        if (!args)
+                return 0;
+
         r = lookup_paths_init_or_warn(&paths, arg_runtime_scope, LOOKUP_PATHS_EXCLUDE_GENERATED, arg_root);
         if (r < 0)
                 return r;
