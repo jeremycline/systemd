@@ -78,7 +78,8 @@ int verb_enable(int argc, char *argv[], void *userdata) {
 
         const char *operation = strjoina("to ", verb);
 
-        if (!install_client_side())
+        /* Globbing only makes sense for some verbs and only when run server-side */
+        if (!install_client_side() && streq(verb, "disable"))
                 mangle_flags |= UNIT_NAME_MANGLE_GLOB;
 
         r = mangle_names(operation, ASSERT_PTR(strv_skip(argv, 1)),
@@ -145,6 +146,7 @@ int verb_enable(int argc, char *argv[], void *userdata) {
         } else {
                 _cleanup_(sd_bus_message_unrefp) sd_bus_message *reply = NULL, *m = NULL;
                 _cleanup_(sd_bus_error_free) sd_bus_error error = SD_BUS_ERROR_NULL;
+                _cleanup_strv_free_ char **expanded_names = NULL;
                 bool expect_carries_install_info = false;
                 bool send_runtime = true, send_force = true, send_preset_mode = false;
                 const char *method, *warn_trigger_operation = NULL;
@@ -170,16 +172,18 @@ int verb_enable(int argc, char *argv[], void *userdata) {
                 if (r < 0)
                         return r;
 
-                r = expand_unit_names(bus, names, NULL, &names, NULL);
+                // Maybe we could do this server-side
+                r = expand_unit_names(bus, names, NULL, &expanded_names, NULL);
                 if (r < 0)
                         return log_error_errno(r, "Failed to expand names: %m");
 
-                r = enable_sysv_units(verb, names);
+                // Maybe we don't do this client-side
+                r = enable_sysv_units(verb, expanded_names);
                 if (r < 0)
                         return r;
 
                 /* If the operation was fully executed by the SysV compat, let's finish early */
-                if (strv_isempty(names)) {
+                if (strv_isempty(expanded_names)) {
                         if (arg_no_reload || install_client_side())
                                 return 0;
 
@@ -232,7 +236,7 @@ int verb_enable(int argc, char *argv[], void *userdata) {
                 if (r < 0)
                         return bus_log_create_error(r);
 
-                r = sd_bus_message_append_strv(m, names);
+                r = sd_bus_message_append_strv(m, expanded_names);
                 if (r < 0)
                         return bus_log_create_error(r);
 
@@ -279,7 +283,7 @@ int verb_enable(int argc, char *argv[], void *userdata) {
                 }
 
                 if (warn_trigger_operation && !arg_quiet && !arg_no_warn)
-                        STRV_FOREACH(unit, names)
+                        STRV_FOREACH(unit, expanded_names)
                                 warn_triggering_units(bus, *unit, warn_trigger_operation, warn_trigger_ignore_masked);
         }
 
